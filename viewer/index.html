@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CBCT Segmentation Viewer — Dobbe AI</title>
+<meta name="description" content="Interactive 3D CBCT dental segmentation viewer with FDI labelling, jaw separation, and restoration detection"/>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+:root{
+--bg:#0a0e14;--surface:#12171f;--surface2:#1a2030;--border:#252d3a;
+--text:#e2e8f0;--muted:#64748b;--accent:#3b82f6;--accent-dim:rgba(59,130,246,.12);
+--green:#22c55e;--red:#ef4444;--orange:#f59e0b;--purple:#a78bfa;--cyan:#06b6d4;
+--radius:8px;--font:'Inter',system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:13px}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+header{display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.logo{font-weight:700;font-size:14px;background:linear-gradient(135deg,var(--accent),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.subtitle{font-size:11px;color:var(--muted)}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.badge{font-size:10px;padding:3px 10px;border-radius:12px;background:var(--accent-dim);color:var(--accent);border:1px solid rgba(59,130,246,.2);font-weight:600}
+.btn-sm{font-size:10px;padding:4px 10px;border-radius:var(--radius);background:var(--surface2);color:var(--muted);border:1px solid var(--border);cursor:pointer;font-family:var(--font);transition:all .15s}
+.btn-sm:hover{color:var(--text);border-color:var(--accent);background:var(--accent-dim)}
+
+.workspace{display:flex;flex:1;overflow:hidden}
+.sidebar{width:260px;flex-shrink:0;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow-y:auto}
+.main-panels{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.slice-row{display:flex;flex:1;overflow:hidden}
+.panel-3d{height:280px;flex-shrink:0;border-top:1px solid var(--border);position:relative;background:var(--bg)}
+
+.slice-panel{flex:1;border-right:1px solid var(--border);position:relative;display:flex;flex-direction:column;background:var(--bg)}
+.slice-panel:last-child{border-right:none}
+.panel-label{position:absolute;top:8px;left:10px;font-size:10px;color:var(--muted);z-index:10;pointer-events:none;display:flex;align-items:center;gap:6px}
+.panel-label span{color:var(--accent);font-weight:600;font-size:11px}
+.panel-label .slice-num{background:var(--surface2);padding:1px 6px;border-radius:4px;font-variant-numeric:tabular-nums}
+canvas.slice-canvas{flex:1;width:100%;display:block;image-rendering:pixelated;cursor:crosshair}
+
+.section{padding:12px;border-bottom:1px solid var(--border)}
+.section-title{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;font-weight:600}
+
+.toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:12px}
+.toggle-switch{position:relative;width:32px;height:17px}
+.toggle-switch input{opacity:0;width:0;height:0}
+.ts{position:absolute;inset:0;background:var(--border);border-radius:9px;cursor:pointer;transition:.2s}
+.ts::before{content:'';position:absolute;width:11px;height:11px;left:3px;top:3px;background:var(--muted);border-radius:50%;transition:.2s}
+.toggle-switch input:checked+.ts{background:rgba(59,130,246,.35)}
+.toggle-switch input:checked+.ts::before{transform:translateX(15px);background:var(--accent)}
+
+.slider-row{margin-bottom:8px}
+.slider-label{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;color:var(--muted)}
+.slider-label span{color:var(--text);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;-webkit-appearance:none;height:3px;background:var(--border);border-radius:2px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--bg)}
+
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.stat-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px}
+.stat-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.stat-value{font-size:20px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+.tooth-list{max-height:280px;overflow-y:auto}
+.tooth-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;cursor:pointer;font-size:11px;transition:background .1s}
+.tooth-item:hover{background:rgba(255,255,255,.04)}
+.tooth-item.active{background:var(--accent-dim);border:1px solid rgba(59,130,246,.2)}
+.tooth-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tooth-fdi{font-weight:600;color:var(--accent);width:24px;flex-shrink:0}
+.tooth-name{color:var(--muted);font-size:10px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rb{font-size:8px;padding:1px 5px;border-radius:4px;font-weight:600;letter-spacing:.3px}
+.rb-r{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.2)}
+.rb-h{background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.2)}
+
+.jaw-legend{display:flex;gap:12px;margin-top:6px}
+.jaw-chip{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted)}
+.jaw-dot{width:6px;height:6px;border-radius:50%}
+
+#canvas3d{width:100%;height:100%;display:block}
+.panel-3d-label{position:absolute;top:8px;left:12px;font-size:10px;color:var(--muted);pointer-events:none;z-index:5}
+.panel-3d-label span{color:var(--purple);font-weight:600}
+.ctrl-hint{position:absolute;bottom:6px;right:12px;font-size:9px;color:var(--muted);pointer-events:none}
+
+#loader{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:100}
+#loader h2{font-size:15px;font-weight:600}
+#loader p{font-size:12px;color:var(--muted)}
+.pbar{width:200px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.pfill{height:100%;background:linear-gradient(90deg,var(--accent),var(--purple));border-radius:2px;animation:pf 2s ease-in-out forwards}
+@keyframes pf{from{width:0}to{width:100%}}
+
+.drop-zone{position:fixed;inset:0;background:rgba(10,14,20,.92);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:200;border:2px dashed var(--accent);margin:20px;border-radius:16px}
+.drop-zone.visible{display:flex}
+.drop-zone h3{font-size:16px;color:var(--accent);margin-bottom:8px}
+.drop-zone p{font-size:12px;color:var(--muted)}
+
+.file-input-row{display:flex;gap:6px;margin-top:6px}
+.file-btn{flex:1;padding:6px 0;border-radius:var(--radius);background:var(--accent-dim);color:var(--accent);border:1px solid rgba(59,130,246,.2);cursor:pointer;font-size:10px;font-family:var(--font);font-weight:600;text-align:center;transition:all .15s}
+.file-btn:hover{background:rgba(59,130,246,.2)}
+
+.kbd{font-size:9px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:1px 4px;color:var(--muted);font-family:var(--font)}
+</style>
+</head>
+<body>
+
+<div id="loader">
+<h2>CBCT Segmentation Viewer</h2>
+<p>Generating dental volume…</p>
+<div class="pbar"><div class="pfill"></div></div>
+</div>
+
+<div class="drop-zone" id="dropZone">
+<h3>Drop labels.json here</h3>
+<p>Load segmentation results from inference output</p>
+</div>
+
+<header>
+<div>
+<div class="logo">Dobbe AI — CBCT Viewer</div>
+<div class="subtitle">3D segmentation · FDI labelling · jaw separation</div>
+</div>
+<div class="header-right">
+<button class="btn-sm" onclick="document.getElementById('fileInput').click()" title="Load labels.json">📂 Load JSON</button>
+<input type="file" id="fileInput" accept=".json" style="display:none" onchange="loadJSON(this)">
+<button class="btn-sm" onclick="screenshot()" title="Save screenshot">📷 Export</button>
+<div class="badge" id="modeBadge">Synthetic demo</div>
+</div>
+</header>
+
+<div class="workspace">
+<aside class="sidebar">
+<div class="section">
+<div class="section-title">Display <span style="float:right;font-size:8px;color:var(--border)">T S 3</span></div>
+<div class="toggle-row"><span>Volume (CT)</span><label class="toggle-switch"><input type="checkbox" id="tog-vol" checked onchange="render()"><span class="ts"></span></label></div>
+<div class="toggle-row"><span>Segmentation</span><label class="toggle-switch"><input type="checkbox" id="tog-seg" checked onchange="render()"><span class="ts"></span></label></div>
+<div class="toggle-row"><span>3D surface</span><label class="toggle-switch"><input type="checkbox" id="tog-3d" checked onchange="toggle3D()"><span class="ts"></span></label></div>
+</div>
+
+<div class="section">
+<div class="section-title">Windowing</div>
+<div class="slider-row"><div class="slider-label">Window <span id="wl-val">2000</span> HU</div><input type="range" id="sl-window" min="100" max="4000" value="2000" step="50" oninput="updateWL()"></div>
+<div class="slider-row"><div class="slider-label">Level <span id="lv-val">500</span> HU</div><input type="range" id="sl-level" min="-1000" max="3000" value="500" step="50" oninput="updateWL()"></div>
+<div class="slider-row"><div class="slider-label">Seg opacity <span id="op-val">60</span>%</div><input type="range" id="sl-opacity" min="10" max="100" value="60" oninput="updateOpacity()"></div>
+</div>
+
+<div class="section">
+<div class="section-title">Statistics</div>
+<div class="stats-grid">
+<div class="stat-card"><div class="stat-label">Teeth</div><div class="stat-value" id="st-teeth">0</div></div>
+<div class="stat-card"><div class="stat-label">Restorations</div><div class="stat-value" id="st-rest">0</div></div>
+<div class="stat-card"><div class="stat-label">Maxilla</div><div class="stat-value" id="st-max">0</div></div>
+<div class="stat-card"><div class="stat-label">Mandible</div><div class="stat-value" id="st-mand">0</div></div>
+</div>
+<div class="jaw-legend">
+<div class="jaw-chip"><div class="jaw-dot" style="background:var(--cyan)"></div>Maxilla</div>
+<div class="jaw-chip"><div class="jaw-dot" style="background:var(--orange)"></div>Mandible</div>
+</div>
+</div>
+
+<div class="section" style="flex:1">
+<div class="section-title">Detected Teeth</div>
+<div class="tooth-list" id="tooth-list"></div>
+</div>
+</aside>
+
+<div class="main-panels">
+<div class="slice-row">
+<div class="slice-panel" id="panel-axial">
+<div class="panel-label"><span>Axial</span> <span class="slice-num" id="lbl-axial">0/0</span></div>
+<canvas class="slice-canvas" id="cv-axial"></canvas>
+</div>
+<div class="slice-panel" id="panel-coronal">
+<div class="panel-label"><span>Coronal</span> <span class="slice-num" id="lbl-coronal">0/0</span></div>
+<canvas class="slice-canvas" id="cv-coronal"></canvas>
+</div>
+<div class="slice-panel" id="panel-sagittal">
+<div class="panel-label"><span>Sagittal</span> <span class="slice-num" id="lbl-sagittal">0/0</span></div>
+<canvas class="slice-canvas" id="cv-sagittal"></canvas>
+</div>
+</div>
+<div class="panel-3d" id="panel3d">
+<div class="panel-3d-label"><span>3D Surface</span> — tooth segmentation</div>
+<canvas id="canvas3d"></canvas>
+<div class="ctrl-hint">drag rotate · scroll zoom · <span class="kbd">R</span> reset</div>
+</div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+
+const PALETTE=[
+'#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#14b8a6',
+'#06b6d4','#0ea5e9','#3b82f6','#6366f1','#8b5cf6','#a78bfa','#d946ef','#ec4899',
+'#fb7185','#fdba74','#fde047','#bef264','#86efac','#5eead4','#7dd3fc','#c4b5fd',
+'#f0abfc','#fda4af','#a3e635','#34d399','#2dd4bf','#38bdf8','#818cf8','#c084fc'
+];
+
+const FDI_MAP={
+1:11,2:12,3:13,4:14,5:15,6:16,7:17,8:18,
+9:21,10:22,11:23,12:24,13:25,14:26,15:27,16:28,
+17:31,18:32,19:33,20:34,21:35,22:36,23:37,24:38,
+25:41,26:42,27:43,28:44,29:45,30:46,31:47,32:48
+};
+
+const FDI_NAMES={
+11:'UR Central Incisor',12:'UR Lateral Incisor',13:'UR Canine',14:'UR 1st Premolar',
+15:'UR 2nd Premolar',16:'UR 1st Molar',17:'UR 2nd Molar',18:'UR Wisdom',
+21:'UL Central Incisor',22:'UL Lateral Incisor',23:'UL Canine',24:'UL 1st Premolar',
+25:'UL 2nd Premolar',26:'UL 1st Molar',27:'UL 2nd Molar',28:'UL Wisdom',
+31:'LL Central Incisor',32:'LL Lateral Incisor',33:'LL Canine',34:'LL 1st Premolar',
+35:'LL 2nd Premolar',36:'LL 1st Molar',37:'LL 2nd Molar',38:'LL Wisdom',
+41:'LR Central Incisor',42:'LR Lateral Incisor',43:'LR Canine',44:'LR 1st Premolar',
+45:'LR 2nd Premolar',46:'LR 1st Molar',47:'LR 2nd Molar',48:'LR Wisdom'
+};
+
+let vol,seg,jaw;
+let D,H,W;
+let crosshair={x:0,y:0,z:0};
+let selectedTooth=null;
+let WW=2000,WL=500,opacity=0.6;
+let teethData=[];
+
+function generateVolume(){
+D=128;H=140;W=128;
+vol=new Float32Array(D*H*W);
+seg=new Uint8Array(D*H*W);
+jaw=new Uint8Array(D*H*W);
+
+const cx=W/2,cy=H/2,cz=D/2;
+for(let i=0;i<vol.length;i++) vol[i]=-800+Math.random()*150;
+
+for(let z=0;z<D;z++)for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+const dx=(x-cx)/42,dy=(y-cy)/50,dz=(z-cz)/36;
+const r=Math.sqrt(dx*dx+dy*dy+dz*dz);
+const idx=z*H*W+y*W+x;
+if(r>0.75&&r<1.05){
+vol[idx]=600+Math.random()*400;
+jaw[idx]=(y<cy)?2:1;
+}else if(r<0.75){
+vol[idx]=-100+Math.random()*300;
+jaw[idx]=(y<cy)?2:1;
+}
+}
+
+const teeth=[
+{cls:1, x:cx+4, y:cy-28,z:cz+18,rx:3.5,ry:5,rz:3.5},
+{cls:2, x:cx+10,y:cy-26,z:cz+14,rx:3,  ry:5,rz:3},
+{cls:3, x:cx+16,y:cy-24,z:cz+8, rx:3,  ry:6,rz:3},
+{cls:4, x:cx+20,y:cy-22,z:cz+2, rx:3,  ry:5,rz:3},
+{cls:5, x:cx+22,y:cy-20,z:cz-4, rx:3,  ry:5,rz:3},
+{cls:6, x:cx+22,y:cy-18,z:cz-10,rx:4.5,ry:6,rz:4},
+{cls:7, x:cx+20,y:cy-16,z:cz-16,rx:4.5,ry:6,rz:4},
+{cls:9, x:cx-4, y:cy-28,z:cz+18,rx:3.5,ry:5,rz:3.5},
+{cls:10,x:cx-10,y:cy-26,z:cz+14,rx:3,  ry:5,rz:3},
+{cls:11,x:cx-16,y:cy-24,z:cz+8, rx:3,  ry:6,rz:3},
+{cls:12,x:cx-20,y:cy-22,z:cz+2, rx:3,  ry:5,rz:3},
+{cls:13,x:cx-22,y:cy-20,z:cz-4, rx:3,  ry:5,rz:3},
+{cls:14,x:cx-22,y:cy-18,z:cz-10,rx:4.5,ry:6,rz:4},
+{cls:15,x:cx-20,y:cy-16,z:cz-16,rx:4.5,ry:6,rz:4},
+{cls:25,x:cx+4, y:cy+28,z:cz+18,rx:3.5,ry:5,rz:3.5},
+{cls:26,x:cx+10,y:cy+26,z:cz+14,rx:3,  ry:5,rz:3},
+{cls:27,x:cx+16,y:cy+24,z:cz+8, rx:3,  ry:6,rz:3},
+{cls:28,x:cx+20,y:cy+22,z:cz+2, rx:3,  ry:5,rz:3},
+{cls:29,x:cx+22,y:cy+20,z:cz-4, rx:3,  ry:5,rz:3},
+{cls:30,x:cx+22,y:cy+18,z:cz-10,rx:4.5,ry:6,rz:4},
+{cls:31,x:cx+20,y:cy+16,z:cz-16,rx:4.5,ry:6,rz:4},
+{cls:17,x:cx-4, y:cy+28,z:cz+18,rx:3.5,ry:5,rz:3.5},
+{cls:18,x:cx-10,y:cy+26,z:cz+14,rx:3,  ry:5,rz:3},
+{cls:19,x:cx-16,y:cy+24,z:cz+8, rx:3,  ry:6,rz:3},
+{cls:20,x:cx-20,y:cy+22,z:cz+2, rx:3,  ry:5,rz:3},
+{cls:21,x:cx-22,y:cy+20,z:cz-4, rx:3,  ry:5,rz:3},
+{cls:22,x:cx-22,y:cy+18,z:cz-10,rx:4.5,ry:6,rz:4},
+{cls:23,x:cx-20,y:cy+16,z:cz-16,rx:4.5,ry:6,rz:4},
+];
+
+for(const t of teeth){
+const ex=Math.ceil(t.rx)+1,ey=Math.ceil(t.ry)+1,ez=Math.ceil(t.rz)+1;
+for(let z=t.z-ez;z<=t.z+ez;z++)for(let y=t.y-ey;y<=t.y+ey;y++)for(let x=t.x-ex;x<=t.x+ex;x++){
+if(z<0||z>=D||y<0||y>=H||x<0||x>=W)continue;
+const dx_=(x-t.x)/t.rx,dy_=(y-t.y)/t.ry,dz_=(z-t.z)/t.rz;
+if(dx_*dx_+dy_*dy_+dz_*dz_<1.0){
+const idx=z*H*W+y*W+x;
+vol[idx]=900+Math.random()*300;
+seg[idx]=t.cls;
+jaw[idx]=(t.y<cy)?2:1;
+}}}
+
+crosshair={x:Math.floor(W/2),y:Math.floor(H/2),z:Math.floor(D/2)};
+}
+
+function buildTeethData(){
+const counts=new Uint32Array(33);
+for(let i=0;i<seg.length;i++)counts[seg[i]]++;
+teethData=[];
+const rng=()=>Math.random();
+for(let c=1;c<=32;c++){
+if(counts[c]<10)continue;
+const fdi=FDI_MAP[c]||0;
+teethData.push({
+cls:c,fdi,name:FDI_NAMES[fdi]||'Unknown',color:PALETTE[c-1],
+voxels:counts[c],restoration:rng()>0.75,jaw:c<=16?'maxilla':'mandible'
+});}
+updateStats();
+buildToothList();
+}
+
+function loadJSON(input){
+const file=input.files[0];if(!file)return;
+const reader=new FileReader();
+reader.onload=function(e){
+try{
+const data=JSON.parse(e.target.result);
+if(data.teeth&&Array.isArray(data.teeth)){
+teethData=data.teeth.map((t,i)=>({
+cls:t.class_index||i+1,fdi:t.fdi_id,name:t.fdi_name||FDI_NAMES[t.fdi_id]||'Unknown',
+color:PALETTE[(t.class_index||i+1)-1]||'#888',voxels:t.voxel_count||0,
+restoration:t.restoration_flag||false,jaw:t.jaw||'unknown'
+}));
+updateStats();buildToothList();
+document.getElementById('modeBadge').textContent='labels.json loaded';
+document.getElementById('modeBadge').style.color='var(--green)';
+}}catch(err){alert('Invalid JSON: '+err.message);}
+};
+reader.readAsText(file);
+}
+
+function updateStats(){
+document.getElementById('st-teeth').textContent=teethData.length;
+document.getElementById('st-rest').textContent=teethData.filter(t=>t.restoration).length;
+document.getElementById('st-max').textContent=teethData.filter(t=>t.jaw==='maxilla').length;
+document.getElementById('st-mand').textContent=teethData.filter(t=>t.jaw==='mandible').length;
+}
+
+function buildToothList(){
+const list=document.getElementById('tooth-list');
+list.innerHTML='';
+for(const t of teethData){
+const row=document.createElement('div');
+row.className='tooth-item';
+row.dataset.cls=t.cls;
+row.innerHTML=
+'<div class="tooth-dot" style="background:'+t.color+'"></div>'+
+'<div class="tooth-fdi">'+t.fdi+'</div>'+
+'<div class="tooth-name">'+t.name+'</div>'+
+'<div class="rb '+(t.restoration?'rb-r':'rb-h')+'">'+(t.restoration?'R':'H')+'</div>';
+row.addEventListener('click',()=>selectTooth(t.cls));
+list.appendChild(row);
+}}
+
+function selectTooth(cls){
+selectedTooth=selectedTooth===cls?null:cls;
+document.querySelectorAll('.tooth-item').forEach(el=>{
+el.classList.toggle('active',+el.dataset.cls===selectedTooth);
+});
+if(selectedTooth!==null)jumpToTooth(selectedTooth);
+render();
+}
+
+function jumpToTooth(cls){
+let sx=0,sy=0,sz=0,n=0;
+for(let z=0;z<D;z++)for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+if(seg[z*H*W+y*W+x]===cls){sx+=x;sy+=y;sz+=z;n++;}}
+if(n>0){crosshair.x=Math.round(sx/n);crosshair.y=Math.round(sy/n);crosshair.z=Math.round(sz/n);}
+}
+
+function huToGray(hu){
+const lo=WL-WW/2,hi=WL+WW/2;
+return Math.max(0,Math.min(1,(hu-lo)/(hi-lo)));
+}
+
+function hexRgb(hex){return[parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];}
+
+function drawSlice(cvId,axis){
+const cv=document.getElementById(cvId);
+const p=cv.parentElement;
+cv.width=p.clientWidth||300;
+cv.height=(p.clientHeight||300);
+const ctx=cv.getContext('2d');
+const showVol=document.getElementById('tog-vol').checked;
+const showSeg=document.getElementById('tog-seg').checked;
+
+let sW,sH,getV,getS,sliceIdx,maxIdx;
+if(axis==='axial'){
+sW=W;sH=H;sliceIdx=crosshair.z;maxIdx=D-1;
+getV=(px,py)=>vol[crosshair.z*H*W+py*W+px];
+getS=(px,py)=>seg[crosshair.z*H*W+py*W+px];
+}else if(axis==='coronal'){
+sW=W;sH=D;sliceIdx=crosshair.y;maxIdx=H-1;
+getV=(px,py)=>vol[py*H*W+crosshair.y*W+px];
+getS=(px,py)=>seg[py*H*W+crosshair.y*W+px];
+}else{
+sW=H;sH=D;sliceIdx=crosshair.x;maxIdx=W-1;
+getV=(px,py)=>vol[py*H*W+px*W+crosshair.x];
+getS=(px,py)=>seg[py*H*W+px*W+crosshair.x];
+}
+
+const lblId='lbl-'+axis;
+document.getElementById(lblId).textContent=sliceIdx+'/'+maxIdx;
+
+const img=ctx.createImageData(sW,sH);
+const d=img.data;
+for(let py=0;py<sH;py++)for(let px=0;px<sW;px++){
+const i=(py*sW+px)*4;
+const hu=getV(px,py);
+const cls=getS(px,py);
+const g=showVol?Math.round(huToGray(hu)*255):0;
+if(showSeg&&cls>0){
+const hl=selectedTooth===null||selectedTooth===cls;
+const col=hexRgb(PALETTE[cls-1]||'#888');
+const a=hl?opacity:opacity*0.15;
+d[i]=Math.round(g*(1-a)+col[0]*a);
+d[i+1]=Math.round(g*(1-a)+col[1]*a);
+d[i+2]=Math.round(g*(1-a)+col[2]*a);
+}else{d[i]=d[i+1]=d[i+2]=g;}
+d[i+3]=255;
+}
+
+const tmp=new OffscreenCanvas(sW,sH);
+tmp.getContext('2d').putImageData(img,0,0);
+ctx.imageSmoothingEnabled=false;
+ctx.drawImage(tmp,0,0,cv.width,cv.height);
+
+const scX=cv.width/sW,scY=cv.height/sH;
+let chX,chY;
+if(axis==='axial'){chX=crosshair.x*scX;chY=crosshair.y*scY;}
+else if(axis==='coronal'){chX=crosshair.x*scX;chY=crosshair.z*scY;}
+else{chX=crosshair.y*scX;chY=crosshair.z*scY;}
+
+ctx.strokeStyle='rgba(59,130,246,0.5)';
+ctx.lineWidth=1;ctx.setLineDash([4,4]);
+ctx.beginPath();ctx.moveTo(chX,0);ctx.lineTo(chX,cv.height);ctx.stroke();
+ctx.beginPath();ctx.moveTo(0,chY);ctx.lineTo(cv.width,chY);ctx.stroke();
+ctx.setLineDash([]);
+}
+
+function render(){
+drawSlice('cv-axial','axial');
+drawSlice('cv-coronal','coronal');
+drawSlice('cv-sagittal','sagittal');
+}
+
+['cv-axial','cv-coronal','cv-sagittal'].forEach((id,i)=>{
+const axis=['axial','coronal','sagittal'][i];
+const cv=document.getElementById(id);
+cv.addEventListener('wheel',e=>{
+e.preventDefault();
+const d=e.deltaY>0?1:-1;
+if(axis==='axial')crosshair.z=Math.max(0,Math.min(D-1,crosshair.z+d));
+else if(axis==='coronal')crosshair.y=Math.max(0,Math.min(H-1,crosshair.y+d));
+else crosshair.x=Math.max(0,Math.min(W-1,crosshair.x+d));
+render();
+},{passive:false});
+
+cv.addEventListener('click',e=>{
+const r=cv.getBoundingClientRect();
+const fx=(e.clientX-r.left)/r.width,fy=(e.clientY-r.top)/r.height;
+if(axis==='axial'){crosshair.x=Math.round(fx*W);crosshair.y=Math.round(fy*H);}
+else if(axis==='coronal'){crosshair.x=Math.round(fx*W);crosshair.z=Math.round(fy*D);}
+else{crosshair.y=Math.round(fx*H);crosshair.z=Math.round(fy*D);}
+crosshair.x=Math.max(0,Math.min(W-1,crosshair.x));
+crosshair.y=Math.max(0,Math.min(H-1,crosshair.y));
+crosshair.z=Math.max(0,Math.min(D-1,crosshair.z));
+render();
+});
+});
+
+document.addEventListener('keydown',e=>{
+if(e.target.tagName==='INPUT')return;
+switch(e.key.toLowerCase()){
+case 't':document.getElementById('tog-vol').checked=!document.getElementById('tog-vol').checked;render();break;
+case 's':document.getElementById('tog-seg').checked=!document.getElementById('tog-seg').checked;render();break;
+case '3':document.getElementById('tog-3d').checked=!document.getElementById('tog-3d').checked;toggle3D();break;
+case 'arrowup':crosshair.z=Math.min(D-1,crosshair.z+1);render();e.preventDefault();break;
+case 'arrowdown':crosshair.z=Math.max(0,crosshair.z-1);render();e.preventDefault();break;
+case 'arrowleft':crosshair.x=Math.max(0,crosshair.x-1);render();e.preventDefault();break;
+case 'arrowright':crosshair.x=Math.min(W-1,crosshair.x+1);render();e.preventDefault();break;
+case 'escape':selectedTooth=null;document.querySelectorAll('.tooth-item').forEach(el=>el.classList.remove('active'));render();break;
+}});
+
+function updateWL(){
+WW=+document.getElementById('sl-window').value;
+WL=+document.getElementById('sl-level').value;
+document.getElementById('wl-val').textContent=WW;
+document.getElementById('lv-val').textContent=WL;
+render();
+}
+function updateOpacity(){
+opacity=+document.getElementById('sl-opacity').value/100;
+document.getElementById('op-val').textContent=document.getElementById('sl-opacity').value;
+render();
+}
+
+let scene3,camera3,renderer3,group3;
+function init3D(){
+const cv=document.getElementById('canvas3d');
+const p=document.getElementById('panel3d');
+scene3=new THREE.Scene();
+camera3=new THREE.PerspectiveCamera(35,p.clientWidth/p.clientHeight,0.1,1000);
+camera3.position.set(0,0,200);
+renderer3=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+renderer3.setSize(p.clientWidth,p.clientHeight);
+renderer3.setPixelRatio(Math.min(window.devicePixelRatio,2));
+scene3.add(new THREE.AmbientLight(0xffffff,0.6));
+const dl=new THREE.DirectionalLight(0xffffff,0.8);dl.position.set(2,3,4);scene3.add(dl);
+
+group3=new THREE.Group();scene3.add(group3);
+let drag=false,lx=0,ly=0,rx=0,ry=0,zm=200;
+cv.addEventListener('mousedown',e=>{drag=true;lx=e.clientX;ly=e.clientY;});
+window.addEventListener('mouseup',()=>drag=false);
+cv.addEventListener('mousemove',e=>{
+if(!drag)return;
+ry+=(e.clientX-lx)*0.4;rx+=(e.clientY-ly)*0.4;
+lx=e.clientX;ly=e.clientY;
+group3.rotation.y=ry*Math.PI/180;group3.rotation.x=rx*Math.PI/180;
+});
+cv.addEventListener('wheel',e=>{
+zm=Math.max(80,Math.min(400,zm+e.deltaY*0.3));
+camera3.position.z=zm;e.preventDefault();
+},{passive:false});
+
+buildMesh();
+(function anim(){requestAnimationFrame(anim);renderer3.render(scene3,camera3);})();
+}
+
+function buildMesh(){
+if(!group3)return;
+while(group3.children.length)group3.remove(group3.children[0]);
+const step=2;
+const geoData={};
+for(let z=0;z<D;z+=step)for(let y=0;y<H;y+=step)for(let x=0;x<W;x+=step){
+const c=seg[z*H*W+y*W+x];
+if(c===0)continue;
+if(!geoData[c])geoData[c]=[];
+geoData[c].push(x-W/2,-(y-H/2),z-D/2);
+}
+for(const[cls,pos]of Object.entries(geoData)){
+if(pos.length===0)continue;
+const g=new THREE.BufferGeometry();
+g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+const m=new THREE.PointsMaterial({color:new THREE.Color(PALETTE[(+cls)-1]||'#aaa'),size:step*1.1,sizeAttenuation:true});
+group3.add(new THREE.Points(g,m));
+}
+const jawPos=[];
+const jStep=4;
+for(let z=0;z<D;z+=jStep)for(let y=0;y<H;y+=jStep)for(let x=0;x<W;x+=jStep){
+const j=jaw[z*H*W+y*W+x];
+if(j===0||seg[z*H*W+y*W+x]>0)continue;
+if(vol[z*H*W+y*W+x]>400)jawPos.push(x-W/2,-(y-H/2),z-D/2);
+}
+if(jawPos.length){
+const g=new THREE.BufferGeometry();
+g.setAttribute('position',new THREE.Float32BufferAttribute(jawPos,3));
+group3.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x556677,size:jStep*0.6,transparent:true,opacity:0.12})));
+}
+}
+
+function toggle3D(){
+const show=document.getElementById('tog-3d').checked;
+document.getElementById('panel3d').style.display=show?'':'none';
+if(show&&!renderer3)init3D();
+}
+
+function screenshot(){
+const cv=document.createElement('canvas');
+const w=window.innerWidth,h=window.innerHeight;
+cv.width=w;cv.height=h;
+const ctx=cv.getContext('2d');
+ctx.fillStyle='#0a0e14';ctx.fillRect(0,0,w,h);
+['cv-axial','cv-coronal','cv-sagittal'].forEach((id,i)=>{
+const src=document.getElementById(id);
+const rect=src.getBoundingClientRect();
+ctx.drawImage(src,rect.left,rect.top,rect.width,rect.height);
+});
+const a=document.createElement('a');
+a.download='cbct_viewer_screenshot.png';
+a.href=cv.toDataURL('image/png');a.click();
+}
+
+const dz=document.getElementById('dropZone');
+document.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('visible');});
+document.addEventListener('dragleave',e=>{if(e.relatedTarget===null)dz.classList.remove('visible');});
+document.addEventListener('drop',e=>{
+e.preventDefault();dz.classList.remove('visible');
+const f=e.dataTransfer.files[0];
+if(f&&f.name.endsWith('.json')){
+const r=new FileReader();
+r.onload=function(ev){
+try{
+const data=JSON.parse(ev.target.result);
+if(data.teeth){
+teethData=data.teeth.map((t,i)=>({
+cls:t.class_index||i+1,fdi:t.fdi_id,name:t.fdi_name||FDI_NAMES[t.fdi_id]||'Unknown',
+color:PALETTE[(t.class_index||i+1)-1]||'#888',voxels:t.voxel_count||0,
+restoration:t.restoration_flag||false,jaw:t.jaw||'unknown'
+}));
+updateStats();buildToothList();
+document.getElementById('modeBadge').textContent='labels.json loaded';
+document.getElementById('modeBadge').style.color='var(--green)';
+}}catch(err){alert('Invalid JSON');}
+};r.readAsText(f);
+}});
+
+setTimeout(()=>{
+generateVolume();buildTeethData();render();init3D();
+const ld=document.getElementById('loader');
+ld.style.transition='opacity .4s';ld.style.opacity='0';
+setTimeout(()=>ld.style.display='none',400);
+window.addEventListener('resize',render);
+},2200);
+</script>
+</body>
+</html>
