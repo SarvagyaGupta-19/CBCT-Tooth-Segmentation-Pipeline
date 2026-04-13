@@ -1,5 +1,5 @@
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
-LABEL maintainer="Dobbe AI" description="3D CBCT tooth segmentation pipeline"
+LABEL maintainer="Clinical AI Team" description="3D CBCT tooth segmentation pipeline"
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \

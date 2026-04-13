@@ -1,4 +1,4 @@
-# Dobbe AI — CBCT Segmentation Pipeline
+# CBCT Segmentation Pipeline
 
 # Core ML
 torch==2.1.2
