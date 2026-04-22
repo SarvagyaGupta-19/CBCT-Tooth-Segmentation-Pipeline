@@ -85,8 +85,7 @@ cbct_seg/
 │   └── unet_preprocessing.py   # Baseline volume manipulation (Isotropic Resampling / HU Norm)
 ├── viewer/
 │   └── index.html              # Custom interactive 3D WebGL viewer (Drag-and-drop .json)
-├── assets/                     # Documentation UI materials
-├── COLAB_GUIDE.md              # Explicit execution path mapping for Google Colab GPUs
+├── assets/                     # Documentation UI materials       
 └── Dockerfile                  # Baseline Ubuntu + CUDA Container spec orchestration
 ```
 
